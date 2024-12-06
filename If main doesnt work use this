@@ -1,0 +1,113 @@
+--// Services \\--
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+--// Variables \\--
+local Player = Players.LocalPlayer
+local BuyKart = Workspace:WaitForChild("BarbStores"):WaitForChild("FarmKart"):WaitForChild("CustomerSeat")
+local Karts = Workspace:WaitForChild("Karts")
+local RiceFolder = Workspace:WaitForChild("Rice")
+
+--// State \\--
+local ScriptEnabled = false  -- Initial state
+
+--// Toggle ScriptEnabled on keypress \\--
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if gameProcessedEvent then return end  -- Ignore inputs that are processed by the game (like GUI)
+
+    if input.KeyCode == Enum.KeyCode.LeftBracket then
+        ScriptEnabled = true
+        print("ScriptEnabled is now: " .. tostring(ScriptEnabled))
+    elseif input.KeyCode == Enum.KeyCode.RightBracket then
+        ScriptEnabled = false
+        print("ScriptEnabled is now: " .. tostring(ScriptEnabled))
+    end
+end)
+
+--// Get Tool \\--
+function GetTool(Name)
+    local Tool = Player.Character and Player.Character:FindFirstChild(Name) or Player.Backpack:FindFirstChild(Name)
+    if Tool then
+        if Player.Character then
+            Tool.Parent = Player.Character
+            task.wait(0.1) -- Small delay to ensure the tool is equipped
+        end
+        return Tool
+    end
+end
+
+--// Get Rice \\--
+function GetRice()
+    for _, Rice in next, RiceFolder:GetChildren() do
+        local Model = Rice:FindFirstChildOfClass("Model")
+        if Model and Model.PrimaryPart and Rice:FindFirstChild("Health") and Rice.Health.Value > 0 and Rice:FindFirstChild("Reward") and Rice.Reward.Value > 0 then
+            return Rice, Model.PrimaryPart
+        end
+    end
+end
+
+--// Use Kart \\--
+function UseKart(Kart)
+    while ScriptEnabled do
+        task.wait(0.2) -- Adding a small delay for better performance
+        if Kart.Name == Player.Name then
+            -- Check for Sickles
+            local Sickles = {Kart:WaitForChild("LeftSickle"), Kart:WaitForChild("RightSickle")}
+            
+            -- Farm Rice
+            while Kart.Parent == Karts and ScriptEnabled do
+                -- Sit in the seat if needed
+                local VehicleSeat = Kart:FindFirstChild("VehicleSeat")
+                if VehicleSeat and VehicleSeat.Occupant ~= Player.Character.Humanoid then
+                    VehicleSeat:Sit(Player.Character.Humanoid)
+                end
+                
+                -- Look for Rice
+                local Rice, Part = GetRice()
+                if Rice and Kart.PrimaryPart then
+                    -- Move Kart near the rice
+                    Kart:SetPrimaryPartCFrame(Part.CFrame * CFrame.new(0, 5, -3))
+                    -- Harvest the rice
+                    for _, Sickle in next, Sickles do
+                        firetouchinterest(Sickle, Part, 0)
+                        firetouchinterest(Sickle, Part, 1)
+                    end
+                end
+
+                -- Wait for next check
+                task.wait(0.5)
+            end
+        end
+    end
+end
+
+--// Handle Kart Ownership and Respawn \\--
+function HandleKart()
+    if ScriptEnabled then
+        -- Check if player owns a kart
+        if not Karts:FindFirstChild(Player.Name) then
+            local Tool = GetTool("FarmKart")
+            local Humanoid = Player.Character and Player.Character:FindFirstChild("Humanoid")
+            
+            if Humanoid and Humanoid.Health <= 0 then
+                -- If the player is dead, respawn the character (no RemoteEvent needed in Xeno for this)
+                Player:LoadCharacter()
+            elseif Tool then
+                Tool:Activate()  -- Activate the farm kart tool
+            else
+                BuyKart:Sit(Player.Character.Humanoid)  -- Sit if no kart found
+            end
+        else
+            UseKart(Karts[Player.Name])  -- Use the kart if it exists
+        end
+    end
+end
+
+--// Main Loop \\--
+game:GetService("RunService").Heartbeat:Connect(function()
+    if ScriptEnabled then
+        HandleKart()
+    end
+end)
